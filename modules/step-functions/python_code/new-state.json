@@ -1,0 +1,353 @@
+{
+    "Comment": "State Machine for invoking Lambda functions sequentially with choices and retries.",
+    "StartAt": "S1-Health-Check-Tg2",
+    "States": {
+      "S1-Health-Check-Tg2": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s1",
+        "Next": "Tg2_Instance_Status_Choice"
+      },
+      "Tg2_Instance_Status_Choice": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.Tg2_Instance_Status",
+            "StringEquals": "Unhealthy",
+            "Next": "s1-tg2-RetryOrNotify"
+          }
+        ],
+        "Default": "S2-Traffic-Routing-Tg2"
+      },
+      "s1-tg2-RetryOrNotify": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s1-RetryCount",
+            "NumericGreaterThanEquals": 20,
+            "Next": "s1-SendMailSNS"
+          }
+        ],
+        "Default": "S1-WaitForTG2Health"
+      },
+      "S1-WaitForTG2Health": {
+        "Type": "Wait",
+        "Seconds": 60,
+        "Next": "S1-Health-Check-Tg2"
+      },
+      "S2-Traffic-Routing-Tg2": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s2",
+        "Next": "Check_Traffic_Shift_to_Tg2_Step1"
+      },
+      "Check_Traffic_Shift_to_Tg2_Step1": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s2-TrafficShiftStatus",
+            "StringEquals": "Failed",
+            "Next": "s2-SendMailSNS"
+          }
+        ],
+        "Default": "S2-WaitStep1"
+      },
+      "S2-WaitStep1": {
+        "Type": "Wait",
+        "Seconds": 20,
+        "Next": "S2-Traffic-Routing-Tg2-Step2"
+      },
+      "S2-Traffic-Routing-Tg2-Step2": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s2",
+        "Next": "Check_Traffic_Shift_to_Tg2_Step2"
+      },
+      "Check_Traffic_Shift_to_Tg2_Step2": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s2-TrafficShiftStatus",
+            "StringEquals": "Failed",
+            "Next": "s2-SendMailSNS"
+          }
+        ],
+        "Default": "S2-WaitStep2"
+      },
+      "S2-WaitStep2": {
+        "Type": "Wait",
+        "Seconds": 20,
+        "Next": "S3-Health-Check-Tg1"
+      },
+      "S3-Health-Check-Tg1": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s3",
+        "Next": "Tg1_Instance_Status_Choice"
+      },
+      "Tg1_Instance_Status_Choice": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.Tg1_Instance_Status",
+            "StringEquals": "Unhealthy",
+            "Next": "tg1-RetryOrNotify"
+          }
+        ],
+        "Default": "S4-Tg1-Restart-Script"
+      },
+      "tg1-RetryOrNotify": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s3-RetryCount",
+            "NumericGreaterThanEquals": 20,
+            "Next": "s3-SendMailSNS"
+          }
+        ],
+        "Default": "S3-WaitForTG1Health"
+      },
+      "S3-WaitForTG1Health": {
+        "Type": "Wait",
+        "Seconds": 60,
+        "Next": "S3-Health-Check-Tg1"
+      },
+      "S4-Tg1-Restart-Script": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s4",
+        "Next": "IsScriptExecutedChoice"
+      },
+      "IsScriptExecutedChoice": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s4-ScriptExecutionStatus",
+            "StringEquals": "Fail",
+            "Next": "RetryScriptExecution"
+          }
+        ],
+        "Default": "S4-WaitAfterRestart"
+      },
+      "S4-WaitAfterRestart": {
+        "Type": "Wait",
+        "Seconds": 30,
+        "Next": "S5-Health-Check-Tg1-repeat"
+      },
+      "RetryScriptExecution": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s4-RetryCount",
+            "NumericGreaterThanEquals": 40,
+            "Next": "s4-SendMailSNS"
+          }
+        ],
+        "Default": "S4-Tg1-Restart-Script"
+      },
+      "S5-Health-Check-Tg1-repeat": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s3",
+        "Next": "Tg1_Instance_Status_Choice_Repeat"
+      },
+      "Tg1_Instance_Status_Choice_Repeat": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.Tg1_Instance_Status",
+            "StringEquals": "Unhealthy",
+            "Next": "tg1-RetryOrNotify-repeat"
+          }
+        ],
+        "Default": "S6-Traffic-Routing-Tg1"
+      },
+      "tg1-RetryOrNotify-repeat": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s3-RetryCount",
+            "NumericGreaterThanEquals": 20,
+            "Next": "s3-SendMailSNS"
+          }
+        ],
+        "Default": "S5-WaitForTG1Health"
+      },
+      "S5-WaitForTG1Health": {
+        "Type": "Wait",
+        "Seconds": 60,
+        "Next": "S5-Health-Check-Tg1-repeat"
+      },
+      "S6-Traffic-Routing-Tg1": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s6",
+        "Next": "Check_Traffic_Shift_to_Tg1_Step1"
+      },
+      "Check_Traffic_Shift_to_Tg1_Step1": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s7-TrafficShiftStatus",
+            "StringEquals": "Failed",
+            "Next": "s7-SendMailSNS"
+          }
+        ],
+        "Default": "S6-WaitStep1"
+      },
+      "S6-WaitStep1": {
+        "Type": "Wait",
+        "Seconds": 120,
+        "Next": "S6-Traffic-Routing-Tg1-Step2"
+      },
+      "S6-Traffic-Routing-Tg1-Step2": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s6",
+        "Next": "Check_Traffic_Shift_to_Tg1_Step2"
+      },
+      "Check_Traffic_Shift_to_Tg1_Step2": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s7-TrafficShiftStatus",
+            "StringEquals": "Failed",
+            "Next": "s6-SendMailSNS"
+          }
+        ],
+        "Default": "S6-WaitStep2"
+      },
+      "S6-WaitStep2": {
+        "Type": "Wait",
+        "Seconds": 120,
+        "Next": "S7-Tg2-Restart-Script"
+      },
+      "S7-Tg2-Restart-Script": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s7",
+        "Next": "S7-IsScriptExecutedChoice"
+      },
+      "S7-IsScriptExecutedChoice": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s7-ScriptExecutionStatus",
+            "StringEquals": "Fail",
+            "Next": "S7-RetryScriptExecution"
+          }
+        ],
+        "Default": "S7-WaitAfterRestart"
+      },
+      "S7-RetryScriptExecution": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s7-RetryCount",
+            "NumericGreaterThanEquals": 40,
+            "Next": "s7-SendMailSNS"
+          }
+        ],
+        "Default": "S7-Tg2-Restart-Script"
+      },
+      "S7-WaitAfterRestart": {
+        "Type": "Wait",
+        "Seconds": 30,
+        "Next": "S8-Stop-Tg2"
+      },
+      "S8-Stop-Tg2": {
+        "Type": "Task",
+        "Resource": "arn:aws:lambda:ap-south-1:308521642984:function:s8",
+        "Next": "Stop_Tg2_Instance"
+      },
+      "Stop_Tg2_Instance": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.StopTg2Status",
+            "StringEquals": "Notokay",
+            "Next": "s8-WaitAndRetry"
+          }
+        ],
+        "Default": "SuccessState"
+      },
+      "s8-WaitAndRetry": {
+        "Type": "Choice",
+        "Choices": [
+          {
+            "Variable": "$.s8-RetryCount",
+            "NumericGreaterThan": 60,
+            "Next": "s8-SendMailSNS"
+          }
+        ],
+        "Default": "S8-Stop-Tg2"
+      },
+      "s1-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "s1- Max Retry Count Reached - TG2 Unhealthy",
+          "Subject": "s1- Max Retry Count Reached - TG2 Unhealthy",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "s2-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "s2- Max Retry Count Reached - Traffic Routing Failed from TG1 to TG2",
+          "Subject": "s2- Max Retry Count Reached - Traffic Routing Failed from TG1 to TG2",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "s3-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "s3- Max Retry Count Reached - TG1 Unhealthy",
+          "Subject": "s3- Max Retry Count Reached - TG1 Unhealthy",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "s4-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "s4 - TG2 Log Rotation Failed",
+          "Subject": "s4 - TG2 Restart Script Execution Failed",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "s6-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "s7- Max Retry Count Reached - Traffic Routing Failed from TG2 to TG1 $.s7-TrafficShiftError",
+          "Subject": "s7- Max Retry Count Reached - Traffic Routing Failed from TG2 to TG1",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "s7-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "s4 - TG2 Log Rotation Failed",
+          "Subject": "s4 - TG2 Restart Script Execution Failed",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "s8-SendMailSNS": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "Message": "Stopping TG2 instances failed, retry limit exceeded.",
+          "Subject": "Stopping TG2 Instances Failure",
+          "TopicArn": "arn:aws:sns:ap-south-1:308521642984:tf-error-ots-log-rotation"
+        },
+        "Next": "FailState"
+      },
+      "FailState": {
+        "Type": "Fail"
+      },
+      "SuccessState": {
+        "Type": "Succeed"
+      }
+    }
+  }

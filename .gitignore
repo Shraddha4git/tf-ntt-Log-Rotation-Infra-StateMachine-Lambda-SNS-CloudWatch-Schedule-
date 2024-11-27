@@ -1,0 +1,13 @@
+tf-10-24-test-key-pair.pem
+tf-10-24-test-key-pair.ppk
+s3/
+lambda_python_code/
+python_code_bk_notwk-tsw/
+python_code_old_nw/
+python_code-old/
+python_code-not-wk-traf-steps-wait/
+python_code-wk-old-s2,s7/
+keys/
+.terraform/
+.terraform.lock.hcl
+
