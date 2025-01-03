@@ -22,7 +22,7 @@ variable "ec2_security_group_id" {
   
 }
 variable "private_subnet_ids" {
-  
+  type = list(string)
 }
 variable "SNS_TOPIC_ARN" {
   type = string
